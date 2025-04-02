@@ -8,135 +8,104 @@ class FiltroInteractivo:
     def __init__(self, root):
         self.root = root
         self.root.title("Filtro Pasa Bajas Interactivo")
-        self.root.geometry("1200x800")
+        self.root.geometry("1000x700")
         
-        # Parámetros iniciales
-        self.fs = 1000000  # Frecuencia de muestreo
-        self.t = np.arange(0, 0.004, 1/self.fs)  # Vector de tiempo
+        # Configuración inicial
+        self.fs = 1e6  # Frecuencia de muestreo (1MHz)
+        self.t = np.arange(0, 0.001, 1/self.fs)
+        self.frecuencias = [1000, 3000, 5000]  # 1kHz, 3kHz, 5kHz
         
-        # Señales base
-        self.m = np.cos(2 * np.pi * 1000 * self.t)    # 1kHz
-        self.m1 = np.cos(2 * np.pi * 3000 * self.t)   # 3kHz
-        self.m2 = np.cos(2 * np.pi * 5000 * self.t)   # 5kHz
-        self.mt = self.m + self.m1 + self.m2          # Señal combinada
+        # Generar señales
+        self.senales = [np.cos(2*np.pi*f*self.t) for f in self.frecuencias]
+        self.senal_combinada = sum(self.senales)
         
-        # Parámetros iniciales del filtro
-        self.corte = 1500      # Frecuencia de corte inicial
-        self.num_coef = 201    # Número de coeficientes inicial
+        # Parámetros del filtro
+        self.corte = tk.DoubleVar(value=1500)
+        self.num_coef = tk.IntVar(value=201)
         
-        # Crear figura de matplotlib con solo 2 subplots
-        self.fig, self.axs = plt.subplots(3, 1, figsize=(10, 6))
-        self.fig.subplots_adjust(hspace=0.4)
-        
-        # Crear el canvas de matplotlib
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
-        self.canvas_widget = self.canvas.get_tk_widget()
-        self.canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        
-        # Frame para los controles
-        control_frame = ttk.Frame(self.root)
-        control_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
-        
-        # Slider para frecuencia de corte
-        ttk.Label(control_frame, text="Frecuencia de corte (Hz):").pack()
-        self.corte_var = tk.DoubleVar(value=self.corte)
-        self.corte_slider = ttk.Scale(
-            control_frame,
-            from_=500,
-            to=10000,
-            orient=tk.HORIZONTAL,
-            command=self.actualizar_filtro,
-            variable=self.corte_var
-        )
-        self.corte_slider.pack(fill=tk.X)
-        self.corte_label = ttk.Label(control_frame, text=f"Valor: {self.corte} Hz")
-        self.corte_label.pack()
-        
-        # Slider para número de coeficientes
-        ttk.Label(control_frame, text="Número de coeficientes:").pack()
-        self.coef_var = tk.IntVar(value=self.num_coef)
-        self.coef_slider = ttk.Scale(
-            control_frame,
-            from_=21,
-            to=401,
-            orient=tk.HORIZONTAL,
-            command=self.actualizar_filtro,
-            variable=self.coef_var
-        )
-        self.coef_slider.pack(fill=tk.X)
-        self.coef_label = ttk.Label(control_frame, text=f"Valor: {self.num_coef}")
-        self.coef_label.pack()
-        
-        # Botón para actualizar
-        ttk.Button(control_frame, text="Actualizar Gráficos", command=self.actualizar_filtro).pack(pady=5)
-        
-        # Dibujar gráficos iniciales
+        # UI Setup
+        self.setup_ui()
         self.actualizar_filtro()
     
-    def filtro_pasa_baja(self, corte, fs, num_coeficiente):
-        newf = 0.5 * fs
-        normal_corte = corte / newf
-        coeficiente = np.sinc(2 * normal_corte * (np.arange(num_coeficiente) - (num_coeficiente - 1) / 2))
-        window = np.hamming(num_coeficiente)
-        coeficiente *= window
-        coeficiente /= np.sum(coeficiente)
-        return coeficiente
+    def setup_ui(self):
+        """Configura la interfaz gráfica"""
+        # Figura y gráficos
+        self.fig, (self.ax_original, self.ax_filtrada) = plt.subplots(2, 1, figsize=(9, 5))
+        self.fig.tight_layout(pad=3.0)
+        
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
+        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        
+        # Controles
+        frame_controles = ttk.Frame(self.root)
+        frame_controles.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
+        
+        self.crear_slider(frame_controles, "Frecuencia de corte (Hz):", self.corte, 500, 10000)
+        self.crear_slider(frame_controles, "Número de coeficientes:", self.num_coef, 21, 401, es_impar=True)
+        
+        ttk.Button(frame_controles, text="Actualizar", command=self.actualizar_filtro).pack(pady=5)
     
-    def actualizar_filtro(self, *args):
-        # Obtener valores actuales
-        self.corte = self.corte_var.get()
-        self.num_coef = self.coef_var.get()
+    def crear_slider(self, parent, texto, variable, min_val, max_val, es_impar=False):
+        """Crea un slider con etiqueta descriptiva"""
+        frame = ttk.Frame(parent)
+        frame.pack(fill=tk.X, pady=2)
         
-        # Actualizar etiquetas
-        self.corte_label.config(text=f"Valor: {int(self.corte)} Hz")
-        self.coef_label.config(text=f"Valor: {self.num_coef}")
+        ttk.Label(frame, text=texto).pack(side=tk.TOP, anchor=tk.W)
+        ttk.Scale(
+            frame,
+            from_=min_val,
+            to=max_val,
+            orient=tk.HORIZONTAL,
+            command=lambda _: self.actualizar_filtro(es_impar),
+            variable=variable
+        ).pack(fill=tk.X)
         
-        # Asegurarse que el número de coeficientes es impar
-        if self.num_coef % 2 == 0:
-            self.num_coef += 1
-            self.coef_var.set(self.num_coef)
+        ttk.Label(frame, textvariable=variable).pack(side=tk.TOP)
+    
+    def filtro_pasa_baja(self, corte, num_coeficiente):
+        """Diseña un filtro FIR pasa bajas"""
+        normal_corte = corte / (0.5 * self.fs)
+        coeficientes = np.sinc(2 * normal_corte * (np.arange(num_coeficiente) - (num_coeficiente-1)/2))
+        coeficientes *= np.hamming(num_coeficiente)
+        return coeficientes / coeficientes.sum()
+    
+    def actualizar_filtro(self, forzar_impar=False, *_):
+        """Actualiza el filtro y los gráficos"""
+        if forzar_impar and self.num_coef.get() % 2 == 0:
+            self.num_coef.set(self.num_coef.get() + 1)
         
-        # Aplicar el filtro
-        coeficiente = self.filtro_pasa_baja(self.corte, self.fs, self.num_coef)
-        self.mt_filtrada = np.convolve(self.mt, coeficiente, mode='same')
+        # Aplicar filtro
+        coef = self.filtro_pasa_baja(self.corte.get(), self.num_coef.get())
+        senal_filtrada = np.convolve(self.senal_combinada, coef, mode='same')
         
         # Actualizar gráficos
-        self.actualizar_graficos()
+        self.actualizar_graficos(self.senal_combinada, senal_filtrada)
     
-    def actualizar_graficos(self):
-        # Limpiar todos los subplots
-        for ax in self.axs:
+    def actualizar_graficos(self, original, filtrada):
+        """Dibuja las señales en los gráficos"""
+        for ax in [self.ax_original, self.ax_filtrada]:
             ax.clear()
         
-        # Graficar señal original en el primer subplot
-        self.axs[0].plot(self.t, self.mt, label='Original', color='blue')
-        self.axs[0].set_title('Señal Original (1kHz + 3kHz + 5kHz)')
-        self.axs[0].set_xlabel('Tiempo (s)')
-        self.axs[0].set_ylabel('Amplitud')
-        self.axs[0].grid(True, linestyle='--', alpha=0.6)
-        self.axs[0].legend()
+        # Gráfico de la señal original
+        self.ax_original.plot(self.t, original, 'b', label='Original')
+        self.configurar_ejes(self.ax_original, 'Señal Original (1k + 3k + 5kHz)')
         
-        # Graficar señal filtrada en el segundo subplot
-        self.axs[1].plot(self.t, self.mt_filtrada, label=f'Filtrada ({int(self.corte)} Hz)', color='red')
-        self.axs[1].set_title('Señal Filtrada')
-        self.axs[1].set_xlabel('Tiempo (s)')
-        self.axs[1].set_ylabel('Amplitud')
-        self.axs[1].grid(True, linestyle='--', alpha=0.6)
-        self.axs[1].legend()
+        # Gráfico de la señal filtrada
+        self.ax_filtrada.plot(self.t, filtrada, 'r', label=f'Filtrada ({int(self.corte.get())}Hz)')
+        self.configurar_ejes(self.ax_filtrada, 'Señal Filtrada')
         
-        self.axs[2].plot(self.t, self.mt, label='Original', color='blue')
-        self.axs[2].plot(self.t, self.mt_filtrada, label=f'Filtrada ({int(self.corte)} Hz)', color='red')
-        self.axs[2].set_title('Señal Filtrada y original')
-        self.axs[2].set_xlabel('Tiempo (s)')
-        self.axs[2].set_ylabel('Amplitud')
-        self.axs[2].grid(True, linestyle='--', alpha=0.6)
-        self.axs[2].legend()
-        
-        # Ajustar diseño y redibujar
-        self.fig.tight_layout()
         self.canvas.draw()
+    
+    def configurar_ejes(self, ax, titulo):
+        """Configuración común para ambos ejes"""
+        ax.set_xlabel('Tiempo (s)')
+        ax.set_ylabel('Amplitud')
+        ax.set_title(titulo)
+        ax.grid(True, linestyle='--', alpha=0.6)
+        ax.legend()
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = FiltroInteractivo(root)
     root.mainloop()
+
